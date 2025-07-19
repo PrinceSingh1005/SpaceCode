@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../Context/AuthContext';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const { login } = useAuth(); // Access the login function from AuthContext
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,10 +15,11 @@ const Login = () => {
         email,
         password,
       });
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('userId', data.userId);
+      const newToken = data.token; // Assuming the backend returns { token, userId }
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('userId', data.userId); // Optional, if needed elsewhere
       setError('');
-      navigate('/projects');
+      login(newToken); // Call the AuthContext login function to update state and navigate
     } catch (error) {
       setError(error.response?.data?.error || 'Login failed');
     }

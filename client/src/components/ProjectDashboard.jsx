@@ -289,7 +289,10 @@ const ProjectDashboard = () => {
   );
 
   // Helper to check if user is a collaborator
-  const isCollaborator = selectedProject?.collaborators?.includes(userId);
+  const isCollaborator =
+    selectedProject &&
+    (selectedProject.owner !== userId ||
+      selectedProject.collaborators?.includes(userId));
 
   return (
     <div className="relative flex flex-col lg:flex-row h-screen bg-gray-50 text-gray-800 overflow-hidden">
@@ -297,14 +300,14 @@ const ProjectDashboard = () => {
       {!isCollaborator ? (
         <button
           onClick={() => setIsColabOpen(!isColabOpen)}
-          className="absolute top-8 right-20 z-30 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-opacity duration-300"
+          className="absolute top-4 right-10 z-30 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-opacity duration-300"
         >
-          Colab
+          Invite for Colab
         </button>
       ) : (
         <button
           onClick={leaveCollaboration}
-          className="absolute top-4 right-4 z-30 px-4 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700 focus:outline-none transition-opacity duration-300"
+          className="absolute top-4 right-10 z-30 px-4 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700 focus:outline-none transition-opacity duration-300"
           disabled={!selectedProject || selectedProject.owner === userId}
         >
           Leave Colab
@@ -316,7 +319,7 @@ const ProjectDashboard = () => {
         </div>
       )}
 
-      <div className="lg:hidden fixed left-4 top-4 z-40">
+      <div className="lg:hidden fixed left-6 top-4 z-40">
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="p-2 bg-white shadow rounded-md text-gray-700 hover:text-blue-600 transition"
@@ -370,7 +373,7 @@ const ProjectDashboard = () => {
         {renderSidebarContent()}
       </aside>
 
-      <main className="flex-1 p-6 overflow-y-auto">
+      <main className="flex-1 mt-14 p-6 overflow-y-auto">
         {loading && !selectedProject && (
           <div className="bg-white p-10 rounded-lg shadow text-center text-gray-500">
             Loading projects...

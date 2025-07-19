@@ -16,6 +16,7 @@ const CodeEditor = ({ projectId, fileName }) => {
   const userId = localStorage.getItem('userId');
   const lastCodeRef = useRef(code);
   const isUpdatingRef = useRef(false);
+  const isFocusedRef = useRef(false); // Track editor focus state
 
   const handleCodeChange = useCallback(
     debounce((newCode) => {
@@ -51,14 +52,18 @@ const CodeEditor = ({ projectId, fileName }) => {
     [projectId, fileName]
   );
 
-  const handleCursorChange = useCallback((selection) => {
-    const cursor = selection.getCursor();
-    const lastPosition = cursors[userId] || { row: -1, column: -1 };
-    if (!isUpdatingRef.current && (cursor.row !== lastPosition.row || cursor.column !== lastPosition.column)) {
-      console.log('Emitting cursor move for user:', userId, 'position:', cursor);
-      socket.current.emit('cursorMove', { projectId, userId, position: cursor });
-    }
-  }, [projectId, userId, cursors]);
+  const handleCursorChange = useCallback(
+    debounce((selection) => {
+      if (!isFocusedRef.current) return; // Ignore if not focused
+      const cursor = selection.getCursor();
+      const lastPosition = cursors[userId] || { row: -1, column: -1 };
+      if (!isUpdatingRef.current && (cursor.row !== lastPosition.row || cursor.column !== lastPosition.column)) {
+        console.log('Emitting cursor move for user:', userId, 'position:', cursor);
+        socket.current.emit('cursorMove', { projectId, userId, position: cursor });
+      }
+    }, 100), // Increased debounce to 100ms to reduce frequency
+    [projectId, userId, cursors]
+  );
 
   useEffect(() => {
     socket.current = io('http://localhost:5000', {
@@ -107,7 +112,7 @@ const CodeEditor = ({ projectId, fileName }) => {
     });
 
     socket.current.on('cursorMove', ({ userId: movedUserId, position }) => {
-      if (movedUserId !== userId) {
+      if (movedUserId !== userId) { // Only update for other users
         console.log(`Received cursor move from user ${movedUserId}:`, position);
         setCursors((prev) => ({
           ...prev,
@@ -179,6 +184,14 @@ const CodeEditor = ({ projectId, fileName }) => {
     )
     .join('');
 
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+  };
+
+  const handleBlur = () => {
+    isFocusedRef.current = false;
+  };
+
   return (
     <div className="p-4 bg-gray-800 text-white rounded-md">
       <style>{cursorStyles}</style>
@@ -195,6 +208,8 @@ const CodeEditor = ({ projectId, fileName }) => {
         value={code}
         onChange={handleCodeChange}
         onCursorChange={handleCursorChange}
+        onFocus={handleFocus} // Track focus
+        onBlur={handleBlur}   // Track blur
         name="code-editor"
         width="100%"
         height="400px"

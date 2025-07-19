@@ -1,7 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Hero Section */}
@@ -14,18 +21,37 @@ const Home = () => {
             Build projects together with a powerful code editor and seamless meeting integration.
           </p>
           <div className="space-x-4">
-            <Link
-              to="/login"
-              className="inline-block px-6 py-3 bg-white text-blue-600 font-semibold rounded-md hover:bg-gray-200 transition-colors"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="inline-block px-6 py-3 bg-blue-800 text-white font-semibold rounded-md hover:bg-blue-900 transition-colors"
-            >
-              Register
-            </Link>
+            {!user ? (
+              <>
+                <Link
+                  to="/login"
+                  className="inline-block px-6 py-3 bg-white text-blue-600 font-semibold rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  className="inline-block px-6 py-3 bg-blue-800 text-white font-semibold rounded-md hover:bg-blue-900 transition-colors"
+                >
+                  Register
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/projects"
+                  className="inline-block px-6 py-3 bg-blue-800 text-white font-semibold rounded-md hover:bg-blue-900 transition-colors"
+                >
+                  Go to Projects
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="inline-block px-6 py-3 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition-colors"
+                >
+                  Logout
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -68,19 +94,28 @@ const Home = () => {
           <p className="text-lg text-gray-600 mb-8">
             Join our platform and start collaborating on your next project today!
           </p>
-          <Link
-            to="/register"
-            className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Get Started
-          </Link>
+          {!user ? (
+            <Link
+              to="/register"
+              className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Get Started
+            </Link>
+          ) : (
+            <Link
+              to="/projects"
+              className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Go to Projects
+            </Link>
+          )}
         </div>
       </section>
 
       {/* Footer */}
       <footer className="bg-gray-800 text-white py-8">
         <div className="container mx-auto px-4 text-center">
-          <p>&copy; {new Date().getFullYear()} Real-Time Code Editor. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Real-Time Code Editor. All rights reserved.</p>
         </div>
       </footer>
     </div>
