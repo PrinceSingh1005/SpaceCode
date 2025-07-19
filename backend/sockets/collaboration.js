@@ -1,56 +1,62 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = (io) => {
-  io.on('connection', (socket) => {
-    console.log('New client connected:', socket.id);
-
-    // Authenticate socket connection
+  io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
-      console.log('No token provided for socket:', socket.id);
-      socket.disconnect();
-      return;
+      console.log('Socket auth failed: No token provided');
+      return next(new Error('Authentication error'));
     }
-
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = decoded; // { id, role }
-      console.log('Authenticated user:', socket.user.id);
+      socket.user = decoded;
+      console.log('Socket authenticated:', decoded.id);
+      next();
     } catch (error) {
-      console.error('Socket auth error:', error);
-      socket.disconnect();
-      return;
+      console.error('Socket auth error:', error.message, { stack: error.stack });
+      next(new Error('Authentication error'));
     }
+  });
 
-    // Join project room
-    socket.on('join-room', (projectId) => {
-      console.log(`User ${socket.user.id} joined room: ${projectId}`);
+  io.on('connection', (socket) => {
+    console.log('User connected:', socket.user.id);
+
+    socket.on('joinRoom', (projectId) => {
       socket.join(projectId);
-      socket.to(projectId).emit('user-joined', socket.user.id);
+      console.log(`${socket.user.id} joined room ${projectId}`);
+      socket.to(projectId).emit('userJoined', socket.user.id);
     });
 
-    // Handle code updates
-    socket.on('code-update', ({ projectId, fileName, content }) => {
-      console.log(`Code update received from user ${socket.user.id} for project ${projectId}, file ${fileName}:`, content);
-      socket.to(projectId).emit('code-update', { fileName, content });
-    });
-
-    // Handle cursor movement
-    socket.on('cursor-move', ({ projectId, userId, position }) => {
-      console.log(`Cursor move from user ${userId} in project ${projectId}:`, position);
-      socket.to(projectId).emit('cursor-move', { userId, position });
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-      socket.broadcast.emit('user-disconnected', socket.user.id);
-    });
-
-    // Leave project room
-    socket.on('leave-room', (projectId) => {
-      console.log(`User ${socket.user.id} left room: ${projectId}`);
+    socket.on('leaveRoom', (projectId) => {
       socket.leave(projectId);
+      console.log(`${socket.user.id} left room ${projectId}`);
+      socket.to(projectId).emit('userDisconnected', socket.user.id);
+    });
+
+    socket.on('codeChange', ({ projectId, fileName, content }) => {
+      console.log(`Code change from ${socket.user.id} for ${projectId}/${fileName}:`, content);
+      socket.to(projectId).emit('codeChange', { projectId, fileName, content, senderId: socket.user.id });
+    });
+
+    socket.on('cursorMove', ({ projectId, userId, position }) => {
+      console.log(`Cursor move from ${userId} in ${projectId}:`, position);
+      socket.to(projectId).emit('cursorMove', { projectId, userId, position });
+    });
+
+    socket.on('projectUpdate', (project) => {
+      console.log('Broadcasted project update for room:', project._id);
+      socket.to(project._id).emit('projectUpdate', project);
+    });
+
+    socket.on('meetingUpdate', (meeting) => {
+      console.log('Broadcasted meeting update for room:', meeting.projectId);
+      socket.to(meeting.projectId).emit('meetingUpdate', meeting);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('User disconnected:', socket.user.id);
+      const rooms = Object.keys(socket.rooms).filter((room) => room !== socket.id);
+      rooms.forEach((room) => socket.to(room).emit('userDisconnected', socket.user.id));
     });
   });
 };
