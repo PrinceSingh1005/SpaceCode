@@ -5,8 +5,8 @@ import Register from './components/Auth/Register';
 import ProjectDashboard from './components/ProjectDashboard';
 import Meeting from './pages/Meeting';
 import Home from './pages/Home';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './Context/AuthContext';
 
 const App = () => {
   return (

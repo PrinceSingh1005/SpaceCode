@@ -109,12 +109,28 @@ const Home = () => {
               Go to Projects
             </Link>
           )}
+          {!user ? (
+            <Link
+              to="/register"
+              className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Get Started
+            </Link>
+          ) : (
+            <Link
+              to="/projects"
+              className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Go to Projects
+            </Link>
+          )}
         </div>
       </section>
 
       {/* Footer */}
       <footer className="bg-gray-800 text-white py-8">
         <div className="container mx-auto px-4 text-center">
+          <p>© {new Date().getFullYear()} Real-Time Code Editor. All rights reserved.</p>
           <p>© {new Date().getFullYear()} Real-Time Code Editor. All rights reserved.</p>
         </div>
       </footer>
