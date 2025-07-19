@@ -7,19 +7,14 @@ const authMiddleware = require('../middleware/auth');
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role } = req.body;
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ error: 'User already exists' });
-
-    // Restrict admin role creation to admins (optional)
-    if (role === 'admin' && req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Cannot create admin user' });
+    const { username, email, password } = req.body;
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username or email already exists' });
     }
-
-    user = new User({ email, password, role });
+    const user = new User({ username, email, password });
     await user.save();
-
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
     res.status(201).json({ token, userId: user._id });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
