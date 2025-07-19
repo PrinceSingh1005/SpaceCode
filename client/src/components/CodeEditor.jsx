@@ -10,7 +10,7 @@ const CodeEditor = ({ projectId, fileName }) => {
   const [code, setCode] = useState('// Start coding here');
   const [users, setUsers] = useState([]);
   const [cursors, setCursors] = useState({});
-  const [saveStatus, setSaveStatus] = useState(''); // For feedback
+  const [saveStatus, setSaveStatus] = useState('');
   const socket = useRef(null);
   const editorRef = useRef(null);
   const userId = localStorage.getItem('userId');
@@ -24,8 +24,6 @@ const CodeEditor = ({ projectId, fileName }) => {
         console.log('Emitting code change for project:', projectId, 'file:', fileName, 'content:', newCode);
         socket.current.emit('codeChange', { projectId, fileName, content: newCode });
         lastCodeRef.current = newCode;
-
-        // Save to database with longer debounce
         saveToDatabase(newCode);
       }
     }, 300),
@@ -41,15 +39,15 @@ const CodeEditor = ({ projectId, fileName }) => {
           { content: newCode },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setSaveStatus('Saved');
-        setTimeout(() => setSaveStatus(''), 2000); // Clear status after 2s
+        setSaveStatus('Saved successfully!');
+        setTimeout(() => setSaveStatus(''), 2000);
         console.log('Code saved to database:', { projectId, fileName });
       } catch (err) {
-        setSaveStatus('Save failed');
+        setSaveStatus('Save failed!');
         console.error('Save to database error:', err.response?.data || err.message);
-        setTimeout(() => setSaveStatus(''), 2000); // Clear status after 2s
+        setTimeout(() => setSaveStatus(''), 2000);
       }
-    }, 1000), // Longer debounce for save (1s)
+    }, 1000),
     [projectId, fileName]
   );
 
@@ -92,6 +90,8 @@ const CodeEditor = ({ projectId, fileName }) => {
     socket.current.on('userJoined', (joinedUserId) => {
       console.log('User joined:', joinedUserId);
       setUsers((prev) => [...new Set([...prev, joinedUserId])]);
+      setSaveStatus(`${joinedUserId.slice(-4)} joined the collaboration!`);
+      setTimeout(() => setSaveStatus(''), 2000);
     });
 
     socket.current.on('userDisconnected', (disconnectedUserId) => {
@@ -102,6 +102,8 @@ const CodeEditor = ({ projectId, fileName }) => {
         delete newCursors[disconnectedUserId];
         return newCursors;
       });
+      setSaveStatus(`${disconnectedUserId.slice(-4)} left the collaboration!`);
+      setTimeout(() => setSaveStatus(''), 2000);
     });
 
     socket.current.on('cursorMove', ({ userId: movedUserId, position }) => {
@@ -182,7 +184,11 @@ const CodeEditor = ({ projectId, fileName }) => {
       <style>{cursorStyles}</style>
       <h3 className="text-lg font-semibold mb-2">{fileName}</h3>
       <p className="mb-2">Connected Users: {users.length || 0}</p>
-      {saveStatus && <p className="text-sm text-yellow-300 mb-2">{saveStatus}</p>}
+      {saveStatus && (
+        <div className="p-2 mb-2 bg-green-600 text-white rounded-md text-sm">
+          {saveStatus}
+        </div>
+      )}
       <AceEditor
         mode="javascript"
         theme="monokai"

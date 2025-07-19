@@ -34,7 +34,7 @@ router.post('/', authMiddleware(), async (req, res) => {
   }
 });
 
-// Get all projects for the user (Admin sees all, others see their own + active collaborations)
+// Get all projects for the authenticated user
 router.get('/', authMiddleware(), async (req, res) => {
   try {
     console.log('User role during fetch:', req.user.role); // Debug user role
@@ -45,7 +45,7 @@ router.get('/', authMiddleware(), async (req, res) => {
         ],
       }).populate('collaborators', 'username');
       console.log('Non-Admin fetching own projects:', projects.length);
-      
+
     res.json(projects);
   } catch (error) {
     console.error('Get projects error:', error);
@@ -210,6 +210,42 @@ router.post('/:projectId/invite', authMiddleware(), async (req, res) => {
   }
 });
 
+
+router.delete('/:projectId/collaborators/:userId', authMiddleware(), async (req, res) => {
+  try {
+    const project = await Project.findOne({ _id: req.params.projectId });
+    if (!project) {
+      console.log('Remove collaborator failed: Project not found', req.params.projectId);
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const userId = req.params.userId;
+    if (project.owner.toString() === userId) {
+      console.log('Remove collaborator failed: Cannot remove project owner', userId);
+      return res.status(400).json({ error: 'Cannot remove project owner' });
+    }
+
+    if (!project.collaborators.includes(userId)) {
+      console.log('Remove collaborator failed: User not a collaborator', userId);
+      return res.status(404).json({ error: 'User is not a collaborator' });
+    }
+
+    project.collaborators = project.collaborators.filter((id) => id.toString() !== userId);
+    await project.save();
+    console.log('Collaborator removed:', { projectId: project._id, userId });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(project._id.toString()).emit('userDisconnected', userId);
+      io.to(project._id.toString()).emit('projectUpdate', project);
+    }
+
+    res.json({ message: 'Collaborator removed', project });
+  } catch (error) {
+    console.error('Remove collaborator error:', error.message, { stack: error.stack });
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
 
 // Get file content (create if not exists)
 router.get('/:projectId/files/:fileName', authMiddleware(), async (req, res) => {

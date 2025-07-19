@@ -4,6 +4,17 @@ import CodeEditor from './CodeEditor';
 import io from 'socket.io-client';
 import CollaborationPanel from './CollaborationPanel';
 
+// Helper function to decode JWT payload
+function decodeJwt(token) {
+  if (!token) return {};
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return {};
+  }
+}
+
 const ProjectDashboard = () => {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -12,42 +23,62 @@ const ProjectDashboard = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isColabOpen, setIsColabOpen] = useState(false);
+  const [notification, setNotification] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const socketRef = useRef(null);
+  const [userId, setUserId] = useState('');
 
   useEffect(() => {
+    // Decode token to get userId
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        // Use decodeJwt instead of jwt.decode
+        const decoded = decodeJwt(token);
+        setUserId(decoded?.id || '');
+      } catch (err) {
+        console.error('Token decoding error:', err.message);
+        setError('Invalid authentication token');
+      }
+    }
+
     socketRef.current = io('http://localhost:5000', {
       auth: { token: localStorage.getItem('token') },
     });
 
-    socketRef.current.on('projectUpdate', (updatedProject) => {
+    const handleProjectUpdate = (updatedProject) => {
       const fetchUpdatedProject = async () => {
         try {
+          setLoading(true);
           const token = localStorage.getItem('token');
           const { data } = await axios.get(
             `http://localhost:5000/api/projects/${updatedProject._id}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
-          setProjects((prev) => prev.map((p) => (p._id === data._id ? data : p)));
+          setProjects((prev) => {
+            const existing = prev.find((p) => p._id === data._id);
+            return existing ? prev.map((p) => (p._id === data._id ? data : p)) : [...prev, data];
+          });
           if (selectedProject?._id === data._id) {
             setSelectedProject(data);
           }
         } catch (err) {
+          console.error('Fetch updated project error:', err.response?.data || err.message);
           setError('Failed to update project data.');
+        } finally {
+          setLoading(false);
         }
       };
       fetchUpdatedProject();
-    });
+    };
 
-    socketRef.current.on('meetingUpdate', (updatedMeeting) => {
+    const handleMeetingUpdate = (updatedMeeting) => {
       if (selectedProject?._id === updatedMeeting.projectId) {
-        setMeetings((prev) =>
-          prev.map((m) => (m._id === updatedMeeting._id ? updatedMeeting : m))
-        );
+        setMeetings((prev) => prev.map((m) => (m._id === updatedMeeting._id ? updatedMeeting : m)));
       }
-    });
+    };
 
-    socketRef.current.on('codeChange', ({ projectId, code }) => {
+    const handleCodeChange = ({ projectId, code }) => {
       if (selectedProject?._id === projectId) {
         setSelectedProject((prev) => ({
           ...prev,
@@ -56,9 +87,26 @@ const ProjectDashboard = () => {
           ),
         }));
       }
+    };
+
+    socketRef.current.on('projectUpdate', handleProjectUpdate);
+    socketRef.current.on('meetingUpdate', handleMeetingUpdate);
+    socketRef.current.on('codeChange', handleCodeChange);
+    socketRef.current.on('userJoined', (joinedUserId) => {
+      console.log('User joined:', joinedUserId);
+      setNotification(`${joinedUserId.slice(-4)} joined the collaboration!`);
+      setTimeout(() => setNotification(''), 2000);
+    });
+    socketRef.current.on('userDisconnected', (disconnectedUserId) => {
+      console.log('User disconnected:', disconnectedUserId);
+      setNotification(`${disconnectedUserId.slice(-4)} left the collaboration!`);
+      setTimeout(() => setNotification(''), 2000);
     });
 
     return () => {
+      socketRef.current?.off('projectUpdate', handleProjectUpdate);
+      socketRef.current?.off('meetingUpdate', handleMeetingUpdate);
+      socketRef.current?.off('codeChange', handleCodeChange);
       socketRef.current?.disconnect();
     };
   }, [selectedProject?._id]);
@@ -84,6 +132,7 @@ const ProjectDashboard = () => {
     const fetchMeetings = async () => {
       if (selectedProject?._id) {
         try {
+          setLoading(true);
           const token = localStorage.getItem('token');
           const { data } = await axios.get(
             `http://localhost:5000/api/meetings/project/${selectedProject._id}`,
@@ -91,8 +140,11 @@ const ProjectDashboard = () => {
           );
           setMeetings(data);
         } catch (err) {
+          console.error('Fetch meetings error:', err.response?.data || err.message);
           setMeetings([]);
           setError('Failed to load meetings. Please try again.');
+        } finally {
+          setLoading(false);
         }
       }
     };
@@ -125,6 +177,56 @@ const ProjectDashboard = () => {
     }
   };
 
+  const onUpdate = (newProject) => {
+    if (newProject) {
+      setProjects((prev) => [...prev, newProject]);
+    } else {
+      const fetchData = async () => {
+        setLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('http://localhost:5000/api/projects', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setProjects(data);
+        } catch (err) {
+          setError(err.response?.data?.error || 'Failed to fetch projects');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
+    }
+  };
+
+  const leaveCollaboration = async () => {
+    if (!selectedProject || !selectedProject._id) {
+      setError('No project selected to leave');
+      return;
+    }
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      await axios.delete(
+        `http://localhost:5000/api/projects/${selectedProject._id}/collaborators/${userId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setNotification('Left collaboration successfully!');
+      setTimeout(() => {
+        setNotification('');
+        setSelectedProject(null);
+        onUpdate();
+      }, 2000);
+      socketRef.current.emit('leaveRoom', selectedProject._id);
+      console.log('Left collaboration for project:', selectedProject._id);
+    } catch (err) {
+      setError('Failed to leave collaboration');
+      console.error('Leave collaboration error:', err.response?.data || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleProjectSelect = (project) => {
     if (!project._id) return;
     setSelectedProject(project);
@@ -132,6 +234,7 @@ const ProjectDashboard = () => {
     setIsMobileMenuOpen(false);
     const fetchMeetings = async () => {
       try {
+        setLoading(true);
         const token = localStorage.getItem('token');
         const { data } = await axios.get(
           `http://localhost:5000/api/meetings/project/${project._id}`,
@@ -139,8 +242,11 @@ const ProjectDashboard = () => {
         );
         setMeetings(data);
       } catch (err) {
+        console.error('Fetch meetings error:', err.response?.data || err.message);
         setMeetings([]);
         setError('Failed to load meetings. Please try again.');
+      } finally {
+        setLoading(false);
       }
     };
     fetchMeetings();
@@ -168,11 +274,8 @@ const ProjectDashboard = () => {
         {projects.map((project) => (
           <div
             key={project._id}
-            className={`p-3 cursor-pointer rounded-md shadow-sm ${
-              selectedProject?._id === project._id
-                ? 'bg-blue-100'
-                : 'bg-white hover:bg-gray-100'
-            }`}
+            className={`p-3 cursor-pointer rounded-md shadow-sm ${selectedProject?._id === project._id ? 'bg-blue-100' : 'bg-white hover:bg-gray-100'
+              }`}
             onClick={() => handleProjectSelect(project)}
           >
             <h3 className="font-medium">{project.name}</h3>
@@ -185,25 +288,38 @@ const ProjectDashboard = () => {
     </>
   );
 
+  // Helper to check if user is a collaborator
+  const isCollaborator = selectedProject?.collaborators?.includes(userId);
+
   return (
     <div className="relative flex flex-col lg:flex-row h-screen bg-gray-50 text-gray-800 overflow-hidden">
-      <button
-        onClick={() => setIsColabOpen(!isColabOpen)}
-        className="absolute top-4 right-4 z-30 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition"
-      >
-        Colab
-      </button>
-
+      {/* Show Colab or Leave Colab button based on collaboration status */}
+      {!isCollaborator ? (
+        <button
+          onClick={() => setIsColabOpen(!isColabOpen)}
+          className="absolute top-8 right-20 z-30 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-opacity duration-300"
+        >
+          Colab
+        </button>
+      ) : (
+        <button
+          onClick={leaveCollaboration}
+          className="absolute top-4 right-4 z-30 px-4 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700 focus:outline-none transition-opacity duration-300"
+          disabled={!selectedProject || selectedProject.owner === userId}
+        >
+          Leave Colab
+        </button>
+      )}
       {isColabOpen && (
-        <div className="absolute top-16 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all">
-          <CollaborationPanel projects={projects} onUpdate={() => {}} />
+        <div className="absolute top-20 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all duration-300">
+          <CollaborationPanel projects={projects} onUpdate={onUpdate} />
         </div>
       )}
 
       <div className="lg:hidden fixed left-4 top-4 z-40">
         <button
           onClick={() => setIsMobileMenuOpen(true)}
-          className="p-2 bg-white shadow rounded-md text-gray-700 hover:text-blue-600"
+          className="p-2 bg-white shadow rounded-md text-gray-700 hover:text-blue-600 transition"
         >
           <svg
             className="w-6 h-6"
@@ -218,22 +334,20 @@ const ProjectDashboard = () => {
       </div>
 
       <div
-        className={`fixed inset-0 bg-black bg-opacity-40 z-30 transition-opacity duration-300 ${
-          isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
+        className={`fixed inset-0 bg-black bg-opacity-40 z-30 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
         onClick={() => setIsMobileMenuOpen(false)}
       />
 
       <aside
-        className={`fixed top-0 left-0 z-40 w-72 h-full bg-white p-6 shadow-lg transition-transform duration-300 ease-in-out transform lg:hidden
-          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+        className={`fixed top-0 left-0 z-40 w-72 h-full bg-white p-6 shadow-lg transition-transform duration-300 ease-in-out transform lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-blue-700">Your Projects</h2>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="text-gray-500 hover:text-red-500"
+            className="text-gray-500 hover:text-red-500 transition"
           >
             <svg
               className="w-6 h-6"
@@ -251,16 +365,22 @@ const ProjectDashboard = () => {
 
       <aside className="hidden lg:block lg:w-1/4 p-6 bg-white shadow-lg border-r border-gray-200 overflow-y-auto">
         <h2 className="text-2xl font-bold mb-6 text-blue-700">Your Projects</h2>
+        {loading && <p className="text-gray-500">Loading...</p>}
         {error && <p className="text-red-500 mb-4">{error}</p>}
         {renderSidebarContent()}
       </aside>
 
       <main className="flex-1 p-6 overflow-y-auto">
+        {loading && !selectedProject && (
+          <div className="bg-white p-10 rounded-lg shadow text-center text-gray-500">
+            Loading projects...
+          </div>
+        )}
         {selectedProject ? (
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <h2 className="text-2xl font-bold mb-4 text-blue-700">{selectedProject.name}</h2>
             <p className="mb-4 text-gray-600">
-              Owner: {selectedProject.owner === localStorage.getItem('userId') ? 'You' : 'Another user'} |
+              Owner: {selectedProject.owner === userId ? 'You' : 'Another user'} |
               Collaborators: {selectedProject.collaborators?.map((id) => String(id).slice(-4)).join(', ') || 'None'}
             </p>
             <CodeEditor projectId={selectedProject._id} fileName="index.js" socket={socketRef.current} />
@@ -283,15 +403,36 @@ const ProjectDashboard = () => {
               )}
             </div>
           </div>
-        ) : (
+        ) : !loading && (
           <div className="bg-white p-10 rounded-lg shadow text-center text-gray-500">
             No project selected. Choose or create a project to get started.
           </div>
         )}
         {error && <p className="text-red-500 mt-4">{error}</p>}
+        {notification && (
+          <div className="fixed top-4 left-4 p-2 bg-green-600 text-white rounded-md text-sm shadow-lg opacity-0 animate-fadeInOut z-50">
+            {notification}
+          </div>
+        )}
       </main>
     </div>
   );
 };
+
+// CSS Animation for Notification Fade
+const styles = `
+  @keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(-10px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-10px); }
+  }
+  .animate-fadeInOut {
+    animation: fadeInOut 2.5s ease-in-out forwards;
+  }
+`;
+const styleSheet = document.createElement('style');
+styleSheet.textContent = styles;
+document.head.appendChild(styleSheet);
 
 export default ProjectDashboard;
