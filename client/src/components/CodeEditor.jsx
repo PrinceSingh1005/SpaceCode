@@ -3,118 +3,128 @@ import { io } from 'socket.io-client';
 import AceEditor from 'react-ace';
 import 'ace-builds/src-noconflict/mode-javascript';
 import 'ace-builds/src-noconflict/theme-monokai';
+import 'ace-builds/src-noconflict/ext-language_tools';
 import axios from 'axios';
 import debounce from 'lodash/debounce';
 
+function decodeJwt(token) {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
 const CodeEditor = ({ projectId, fileName }) => {
-  const [code, setCode] = useState('// Start coding here');
-  const [users, setUsers] = useState([]);
+  const [code, setCode] = useState('// Your code starts here...');
+  const [collaborators, setCollaborators] = useState({});
   const [cursors, setCursors] = useState({});
-  const [lastSavedCode, setLastSavedCode] = useState('// Start coding here');
-  const [saveStatus, setSaveStatus] = useState('');
+  const [saveStatus, setSaveStatus] = useState('Saved');
+  const [userId, setUserId] = useState(null);
+  const [username, setUsername] = useState('');
   const socket = useRef(null);
   const editorRef = useRef(null);
-  const userId = localStorage.getItem('userId');
-  const lastCodeRef = useRef(code);
-  const cursorPositionRef = useRef({ row: 0, column: 0 }); // Track local cursor position
+  const codeRef = useRef(code);
 
-  const handleCodeChange = useCallback(
-    debounce((newCode) => {
-      if (newCode !== lastCodeRef.current) {
-        setCode(newCode);
-        console.log('Emitting code change for project:', projectId, 'file:', fileName, 'content:', newCode, 'userId:', userId);
-        socket.current.emit('codeChange', { projectId, fileName, content: newCode, senderId: userId });
-        lastCodeRef.current = newCode;
-      }
-    }, 300),
-    [projectId, fileName, userId]
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const decoded = decodeJwt(token);
+    if (decoded) {
+      setUserId(decoded.id);
+      setUsername(decoded.username);
+    }
+  }, []);
+
+  const debouncedEmit = useCallback(
+    debounce((newCode, senderId) => {
+      socket.current.emit('codeChange', { projectId, fileName, content: newCode, senderId });
+    }, 250),
+    [projectId, fileName]
   );
 
-  const handleCursorChange = useCallback((selection) => {
-    const cursor = selection.getCursor();
-    cursorPositionRef.current = cursor; // Update local cursor position
-    const lastPosition = cursors[userId] || { row: -1, column: -1 };
-    if (cursor.row !== lastPosition.row || cursor.column !== lastPosition.column) {
-      console.log('Emitting cursor move for user:', userId, 'position:', cursor);
-      socket.current.emit('cursorMove', { projectId, userId, position: cursor });
+  const handleCodeChange = (newCode) => {
+    setCode(newCode);
+    codeRef.current = newCode;
+    setSaveStatus('Unsaved');
+    if (userId) {
+      debouncedEmit(newCode, userId);
     }
-  }, [projectId, userId, cursors]);
+  };
+
+  const handleCursorChange = useCallback(
+    debounce((selection) => {
+      const position = selection.getCursor();
+      if (userId && username) {
+        socket.current.emit('cursorMove', { projectId, userId, username, position });
+      }
+    }, 50),
+    [projectId, userId, username]
+  );
 
   const handleSave = async () => {
+    setSaveStatus('Saving...');
     try {
-      setSaveStatus('Saving...');
       const token = localStorage.getItem('token');
-      const response = await axios.post(
+      await axios.post(
         `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
-        { content: code },
+        { content: codeRef.current },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setLastSavedCode(code);
-      setSaveStatus('Saved!');
-      console.log('Code saved:', { projectId, fileName, lastModified: response.data.lastModified });
-
-      // Sync saved state to all clients
-      socket.current.emit('codeChange', { projectId, fileName, content: code, senderId: userId, isSaved: true });
-
-      setTimeout(() => setSaveStatus(''), 2000);
+      setSaveStatus('Saved');
+      setTimeout(() => setSaveStatus(''), 3000);
     } catch (error) {
-      console.error('Save error:', error);
-      setSaveStatus('Save failed!');
-      setTimeout(() => setSaveStatus(''), 2000);
+      setSaveStatus('Save Failed!');
+      setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
   useEffect(() => {
+    if (!userId) return;
+
     socket.current = io('http://localhost:5000', {
       auth: { token: localStorage.getItem('token') },
     });
 
-    socket.current.on('connect_error', (error) => {
-      console.error('Socket.IO connection error:', error.message, { stack: error.stack });
+    socket.current.emit('joinRoom', { projectId, username });
+
+    socket.current.on('initialState', (initialCollaborators) => {
+      setCollaborators(initialCollaborators);
     });
 
-    console.log('Attempting to join room:', projectId);
-    socket.current.emit('joinRoom', projectId);
-
-    socket.current.on('codeChange', ({ fileName: receivedFileName, content, senderId, isSaved }) => {
-      if (receivedFileName === fileName && senderId !== userId) {
-        console.log('Received code update for file:', receivedFileName, 'content:', content, 'from:', senderId, 'isSaved:', isSaved, 'localUserId:', userId);
-        const currentCursor = { ...cursorPositionRef.current }; // Capture current cursor
-        if (content !== code) { // Only update if content differs
-          setCode(content);
-          if (editorRef.current) {
-            const session = editorRef.current.editor.getSession();
-            session.setValue(content); // Update session directly
-            editorRef.current.editor.moveCursorToPosition(currentCursor); // Restore cursor
-          }
-        }
-        if (isSaved) {
-          setLastSavedCode(content);
-        }
+    socket.current.on('codeChange', ({ content, senderId }) => {
+      if (senderId !== userId) {
+        const cursorPosition = editorRef.current.editor.getCursorPosition();
+        setCode(content);
+        editorRef.current.editor.moveCursorToPosition(cursorPosition);
       }
     });
 
-    socket.current.on('userJoined', (joinedUserId) => {
-      console.log('User joined:', joinedUserId);
-      setUsers((prev) => [...new Set([...prev, joinedUserId])]);
+    socket.current.on('userJoined', ({ id, username: joinedUsername }) => {
+      if (id !== userId) {
+        setCollaborators((prev) => ({ ...prev, [id]: { username: joinedUsername } }));
+      }
     });
 
-    socket.current.on('userDisconnected', (disconnectedUserId) => {
-      console.log('User disconnected:', disconnectedUserId);
-      setUsers((prev) => prev.filter((id) => id !== disconnectedUserId));
+    socket.current.on('userLeft', (leftUserId) => {
+      setCollaborators((prev) => {
+        const newCollaborators = { ...prev };
+        delete newCollaborators[leftUserId];
+        return newCollaborators;
+      });
       setCursors((prev) => {
         const newCursors = { ...prev };
-        delete newCursors[disconnectedUserId];
+        delete newCursors[leftUserId];
         return newCursors;
       });
     });
 
-    socket.current.on('cursorMove', ({ userId: movedUserId, position }) => {
+    socket.current.on('cursorMove', ({ userId: movedUserId, username: movedUsername, position }) => {
       if (movedUserId !== userId) {
-        console.log(`Received cursor move from user ${movedUserId}:`, position);
         setCursors((prev) => ({
           ...prev,
-          [movedUserId]: position,
+          [movedUserId]: { position, username: movedUsername },
         }));
       }
     });
@@ -126,89 +136,97 @@ const CodeEditor = ({ projectId, fileName }) => {
           `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        const initialCode = data.content || '// Start coding here';
+        const initialCode = data.content || '// Your code starts here...';
         setCode(initialCode);
-        setLastSavedCode(initialCode);
-        if (editorRef.current) {
-          editorRef.current.editor.getSession().setValue(initialCode); // Use session for initial load
-          editorRef.current.editor.moveCursorToPosition({ row: 0, column: 0 }); // Start at beginning
-        }
-        lastCodeRef.current = initialCode;
+        codeRef.current = initialCode;
       } catch (err) {
-        console.error('Fetch initial code error:', err);
+        console.error('Failed to fetch initial code:', err);
       }
     };
+
     fetchInitialCode();
 
     return () => {
-      console.log('Leaving room:', projectId);
-      socket.current.emit('leaveRoom', projectId);
+      socket.current.emit('leaveRoom', { projectId, userId });
       socket.current.disconnect();
     };
-  }, [projectId, fileName, userId]);
+  }, [projectId, fileName, userId, username]);
 
-  const cursorMarkers = Object.entries(cursors).map(([userId, position]) => ({
+  const getColorForUser = (id) => {
+    const colors = ['#FF8C00', '#00BFFF', '#ADFF2F', '#FF69B4', '#7B68EE', '#32CD32'];
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const cursorMarkers = Object.entries(cursors).map(([id, { position }]) => ({
     startRow: position.row,
     startCol: position.column,
     endRow: position.row,
     endCol: position.column + 1,
-    className: `cursor-${userId.slice(-4)}`,
+    className: `cursor-marker-${id}`,
     type: 'text',
   }));
 
-  const getColorForUser = (userId) => {
-    const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
-    const index = parseInt(userId.slice(-4), 16) % colors.length;
-    return colors[index];
-  };
-
-  const cursorStyles = Object.keys(cursors)
+  const cursorStyles = Object.entries(cursors)
     .map(
-      (userId) => `
-        .cursor-${userId.slice(-4)} {
-          position: absolute;
-          background: ${getColorForUser(userId)};
-          width: 2px;
-          height: 1.2em;
-        }
-        .cursor-${userId.slice(-4)}:after {
-          content: '${userId.slice(-4)}';
-          position: absolute;
-          top: -20px;
-          left: 0;
-          color: ${getColorForUser(userId)};
-          font-size: 12px;
-          font-weight: bold;
-        }
-      `
+      ([id, { username: cursorUsername }]) => {
+        const color = getColorForUser(id);
+        return `
+          .cursor-marker-${id} {
+            position: absolute;
+            background: ${color};
+            width: 2px !important;
+            z-index: 20;
+          }
+          .ace_cursor-layer .cursor-marker-${id}::after {
+            content: '${cursorUsername}';
+            position: absolute;
+            left: -2px;
+            top: -1.4em;
+            padding: 2px 4px;
+            background: ${color};
+            color: white;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+          }
+        `;
+      }
     )
     .join('');
 
   return (
-    <div className="p-4 bg-gray-800 text-white rounded-md">
+    <div className="relative bg-[#272822] rounded-md shadow-lg">
       <style>{cursorStyles}</style>
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="text-lg font-semibold">{fileName}</h3>
-        <button
-          onClick={handleSave}
-          className="p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300"
-          disabled={code === lastSavedCode}
-        >
-          Save
-        </button>
+      <div className="flex justify-between items-center p-3 bg-gray-700 rounded-t-md">
+        <h3 className="text-lg font-semibold text-gray-200">{fileName}</h3>
+        <div className="flex items-center space-x-4">
+          <span className={`text-sm font-medium ${saveStatus === 'Saved' ? 'text-green-400' : 'text-yellow-400'}`}>
+            {saveStatus}
+          </span>
+          <button
+            onClick={handleSave}
+            className="px-4 py-1 bg-blue-600 text-white text-sm font-bold rounded-md hover:bg-blue-700 disabled:bg-gray-500 transition-colors"
+            disabled={saveStatus !== 'Unsaved'}
+          >
+            Save
+          </button>
+        </div>
       </div>
-      <p className="mb-2">Connected Users: {users.length || 0}</p>
-      {saveStatus && <p className="text-yellow-400 mb-2">{saveStatus}</p>}
       <AceEditor
+        ref={editorRef}
         mode="javascript"
         theme="monokai"
         value={code}
         onChange={handleCodeChange}
         onCursorChange={handleCursorChange}
-        name="code-editor"
+        name={`code-editor-${projectId}`}
         width="100%"
-        height="400px"
-        fontSize={14}
+        height="500px"
+        fontSize={16}
         showPrintMargin={false}
         showGutter={true}
         highlightActiveLine={true}
@@ -221,8 +239,17 @@ const CodeEditor = ({ projectId, fileName }) => {
           showLineNumbers: true,
           tabSize: 2,
         }}
-        ref={editorRef}
       />
+      <div className="absolute top-3 right-48 flex items-center space-x-2">
+        {Object.entries(collaborators).map(([id, { username: collaboratorUsername }]) => (
+          <div key={id} className="flex items-center" title={collaboratorUsername}>
+            <span
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: getColorForUser(id) }}
+            ></span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

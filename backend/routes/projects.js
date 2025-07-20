@@ -211,15 +211,20 @@ router.post('/:projectId/files/:fileName', authMiddleware(), async (req, res) =>
       _id: req.params.projectId,
       $or: [{ owner: req.user.id }, { collaborators: req.user.id }],
     });
+
     if (!project) {
       return res.status(404).json({ error: 'Project not found or unauthorized' });
     }
+
     const { content, version: clientVersion } = req.body;
+
     if (!content) {
       return res.status(400).json({ error: 'Content is required' });
     }
+
     let file = project.files.find((f) => f.name === req.params.fileName);
     const currentVersion = file ? Math.floor(file.lastModified.getTime() / 1000) : 0;
+
     if (file) {
       if (clientVersion && clientVersion < currentVersion) {
         return res.status(409).json({ error: 'Conflict detected, please refresh and try again', currentVersion });
@@ -229,24 +234,18 @@ router.post('/:projectId/files/:fileName', authMiddleware(), async (req, res) =>
     } else {
       project.files.push({ name: req.params.fileName, content, lastModified: new Date() });
     }
+
     await project.save();
+
     const newVersion = Math.floor(file?.lastModified.getTime() / 1000) || Math.floor(new Date().getTime() / 1000);
-    const io = req.app.get('io');
-    if (io) {
-      io.to(project._id.toString()).emit('codeChange', {
-        projectId: project._id,
-        fileName: req.params.fileName,
-        content,
-        version: newVersion,
-        senderId: req.user.id,
-      });
-    }
+
     res.json({ message: 'File updated', content, lastModified: file?.lastModified || new Date(), version: newVersion });
   } catch (error) {
     console.error('Update file error:', error.message, { stack: error.stack });
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
+
 
 router.get('/:projectId/files', authMiddleware(), async (req, res) => {
   try {
