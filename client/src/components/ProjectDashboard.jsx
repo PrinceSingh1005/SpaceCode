@@ -3,6 +3,7 @@ import axios from 'axios';
 import CodeEditor from './CodeEditor';
 import io from 'socket.io-client';
 import CollaborationPanel from './CollaborationPanel';
+import { useAuth } from '../Context/AuthContext';
 
 // Helper function to decode JWT payload
 function decodeJwt(token) {
@@ -27,6 +28,7 @@ const ProjectDashboard = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const socketRef = useRef(null);
   const [userId, setUserId] = useState('');
+  const { logout } = useAuth(); // Get logout from AuthContext
 
   useEffect(() => {
     // Decode token to get userId
@@ -285,6 +287,7 @@ const ProjectDashboard = () => {
           </div>
         ))}
       </div>
+      {/* Remove the logout button from here */}
     </>
   );
 
@@ -345,6 +348,7 @@ const ProjectDashboard = () => {
       <aside
         className={`fixed top-0 left-0 z-40 w-72 h-full bg-white p-6 shadow-lg transition-transform duration-300 ease-in-out transform lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
+        style={{ paddingBottom: '72px' }} // Add space for the logout button
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-blue-700">Your Projects</h2>
@@ -364,13 +368,25 @@ const ProjectDashboard = () => {
           </button>
         </div>
         {renderSidebarContent()}
+        <button
+          onClick={logout}
+          className="absolute left-6 bottom-6 w-[calc(100%-3rem)] p-3 bg-gray-200 text-gray-700 rounded-md hover:bg-red-500 hover:text-white transition-colors"
+        >
+          Log Out
+        </button>
       </aside>
 
-      <aside className="hidden lg:block lg:w-1/4 p-6 bg-white shadow-lg border-r border-gray-200 overflow-y-auto">
+      <aside className="hidden lg:block lg:w-1/4 p-6 bg-white shadow-lg border-r border-gray-200 overflow-y-auto relative" style={{ paddingBottom: '72px' }}>
         <h2 className="text-2xl font-bold mb-6 text-blue-700">Your Projects</h2>
         {loading && <p className="text-gray-500">Loading...</p>}
         {error && <p className="text-red-500 mb-4">{error}</p>}
         {renderSidebarContent()}
+        <button
+          onClick={logout}
+          className="absolute left-6 bottom-6 w-[calc(100%-3rem)] p-3 bg-gray-200 text-gray-700 rounded-md hover:bg-red-500 hover:text-white transition-colors"
+        >
+          Log Out
+        </button>
       </aside>
 
       <main className="flex-1 mt-14 p-6 overflow-y-auto">

@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
       setUser(decoded.id);
       setRole(decoded.role || 'user');
       setToken(newToken);
-      navigate('/projects'); // Navigation triggered here
+      navigate('/projects');
     } catch (err) {
       console.error('Login token error:', err.message);
     }
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setRole(null);
     setToken(null);
-    navigate('/login');
+    navigate('/');
   };
 
   const value = {
