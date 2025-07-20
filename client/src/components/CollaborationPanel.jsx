@@ -23,15 +23,27 @@ const CollaborationPanel = ({ projects, onUpdate }) => {
   }, [projects, selectedProjectId]);
 
   useEffect(() => {
+    const selectedProject = projects.find(p => p._id === selectedProjectId);
+    if (selectedProject && selectedProject.inviteCode && selectedProject.sessionActive) {
+      setInviteCode(selectedProject.inviteCode);
+      const newMeetingLink = `http://localhost:5173/meeting/${selectedProject._id}`;
+      setMeetingLink(newMeetingLink);
+    } else {
+      setInviteCode('');
+      setMeetingLink('');
+    }
+  }, [selectedProjectId, projects]);
+
+  useEffect(() => {
     socket.on('projectUpdate', (updatedProject) => {
       if (updatedProject._id === selectedProjectId) {
         setInviteCode(updatedProject.inviteCode || '');
       }
-      onUpdate(updatedProject); // Pass updated project to trigger refresh
+      onUpdate(updatedProject);
     });
 
     socket.on('meetingUpdate', (updatedMeeting) => {
-      onUpdate(); // Trigger refresh on meeting update
+      onUpdate();
     });
 
     return () => {
@@ -55,11 +67,9 @@ const CollaborationPanel = ({ projects, onUpdate }) => {
       setInviteCode(data.inviteCode);
       setMeetingLink(data.meetingLink);
       setError('');
-      console.log('Invite generated:', { inviteCode: data.inviteCode, meetingLink: data.meetingLink });
       socket.emit('projectUpdate', { _id: selectedProjectId, inviteCode: data.inviteCode });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to generate invite');
-      console.error('Generate invite error:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -88,11 +98,9 @@ const CollaborationPanel = ({ projects, onUpdate }) => {
       );
       setMeetingLink(data.meetingLink);
       setError('');
-      console.log('Meeting created:', data.meetingLink);
       socket.emit('meetingUpdate', { ...data, projectId: selectedProjectId });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create meeting');
-      console.error('Create meeting error:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -111,15 +119,12 @@ const CollaborationPanel = ({ projects, onUpdate }) => {
         { inviteCode: joinCode.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      // Update projects via callback since this component doesn't manage projects state directly
-      onUpdate(data); // Pass the new project data to the parent
+      onUpdate(data);
       setJoinCode('');
       setError('Successfully joined the project!');
       setTimeout(() => setError(''), 3000);
-      console.log('Joined project:', data._id);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to join with code');
-      console.error('Join with code error:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -150,7 +155,7 @@ const CollaborationPanel = ({ projects, onUpdate }) => {
             disabled={loading || !selectedProjectId}
             className="w-full p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
           >
-            {inviteCode ? 'Invite Code Generated' : 'Generate Invite Code'}
+            {inviteCode ? 'Copy Invite Code' : 'Start New Session & Get Invite'}
           </button>
           {inviteCode && (
             <div className="mt-2 p-2 bg-gray-50 rounded-md">

@@ -5,7 +5,6 @@ import io from 'socket.io-client';
 import CollaborationPanel from './CollaborationPanel';
 import { useAuth } from '../Context/AuthContext';
 
-// Helper function to decode JWT payload
 function decodeJwt(token) {
   if (!token) return {};
   try {
@@ -28,14 +27,12 @@ const ProjectDashboard = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const socketRef = useRef(null);
   const [userId, setUserId] = useState('');
-  const { logout } = useAuth(); // Get logout from AuthContext
+  const { logout } = useAuth();
 
   useEffect(() => {
-    // Decode token to get userId
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        // Use decodeJwt instead of jwt.decode
         const decoded = decodeJwt(token);
         setUserId(decoded?.id || '');
       } catch (err) {
@@ -95,12 +92,10 @@ const ProjectDashboard = () => {
     socketRef.current.on('meetingUpdate', handleMeetingUpdate);
     socketRef.current.on('codeChange', handleCodeChange);
     socketRef.current.on('userJoined', (joinedUserId) => {
-      console.log('User joined:', joinedUserId);
       setNotification(`${joinedUserId.slice(-4)} joined the collaboration!`);
       setTimeout(() => setNotification(''), 2000);
     });
     socketRef.current.on('userDisconnected', (disconnectedUserId) => {
-      console.log('User disconnected:', disconnectedUserId);
       setNotification(`${disconnectedUserId.slice(-4)} left the collaboration!`);
       setTimeout(() => setNotification(''), 2000);
     });
@@ -220,7 +215,6 @@ const ProjectDashboard = () => {
         onUpdate();
       }, 2000);
       socketRef.current.emit('leaveRoom', selectedProject._id);
-      console.log('Left collaboration for project:', selectedProject._id);
     } catch (err) {
       setError('Failed to leave collaboration');
       console.error('Leave collaboration error:', err.response?.data || err.message);
@@ -287,19 +281,26 @@ const ProjectDashboard = () => {
           </div>
         ))}
       </div>
-      {/* Remove the logout button from here */}
     </>
   );
 
-  // Helper to check if user is a collaborator
   const isCollaborator =
     selectedProject &&
     (selectedProject.owner !== userId ||
       selectedProject.collaborators?.includes(userId));
 
+  const ownerInfo = selectedProject?.collaborators?.find(
+    (c) => c._id === selectedProject.owner
+  );
+  const ownerName = ownerInfo ? ownerInfo.username : 'Unknown';
+
+  const collaboratorDisplay = selectedProject?.collaborators
+    ?.filter((c) => c._id !== selectedProject.owner)
+    ?.map((c) => c.username)
+    ?.join(', ') || 'None';
+
   return (
     <div className="relative flex flex-col lg:flex-row h-screen bg-gray-50 text-gray-800 overflow-hidden">
-      {/* Show Colab or Leave Colab button based on collaboration status */}
       {!isCollaborator ? (
         <button
           onClick={() => setIsColabOpen(!isColabOpen)}
@@ -348,7 +349,7 @@ const ProjectDashboard = () => {
       <aside
         className={`fixed top-0 left-0 z-40 w-72 h-full bg-white p-6 shadow-lg transition-transform duration-300 ease-in-out transform lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
-        style={{ paddingBottom: '72px' }} // Add space for the logout button
+        style={{ paddingBottom: '72px' }}
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-blue-700">Your Projects</h2>
@@ -399,8 +400,8 @@ const ProjectDashboard = () => {
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <h2 className="text-2xl font-bold mb-4 text-blue-700">{selectedProject.name}</h2>
             <p className="mb-4 text-gray-600">
-              Owner: {selectedProject.owner === userId ? 'You' : 'Another user'} |
-              Collaborators: {selectedProject.collaborators?.map((id) => String(id).slice(-4)).join(', ') || 'None'}
+              Owner: {ownerName} |
+              Collaborators: {collaboratorDisplay}
             </p>
             <CodeEditor projectId={selectedProject._id} fileName="index.js" socket={socketRef.current} />
             <div className="mt-6">
@@ -438,7 +439,6 @@ const ProjectDashboard = () => {
   );
 };
 
-// CSS Animation for Notification Fade
 const styles = `
   @keyframes fadeInOut {
     0% { opacity: 0; transform: translateY(-10px); }

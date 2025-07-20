@@ -10,60 +10,59 @@ const CodeEditor = ({ projectId, fileName }) => {
   const [code, setCode] = useState('// Start coding here');
   const [users, setUsers] = useState([]);
   const [cursors, setCursors] = useState({});
+  const [lastSavedCode, setLastSavedCode] = useState('// Start coding here');
   const [saveStatus, setSaveStatus] = useState('');
   const socket = useRef(null);
   const editorRef = useRef(null);
   const userId = localStorage.getItem('userId');
   const lastCodeRef = useRef(code);
-  const isUpdatingRef = useRef(false);
-  const isFocusedRef = useRef(false); // Track editor focus state
+  const cursorPositionRef = useRef({ row: 0, column: 0 }); // Track local cursor position
 
   const handleCodeChange = useCallback(
     debounce((newCode) => {
-      if (newCode !== lastCodeRef.current && !isUpdatingRef.current) {
+      if (newCode !== lastCodeRef.current) {
         setCode(newCode);
-        console.log('Emitting code change for project:', projectId, 'file:', fileName, 'content:', newCode);
-        socket.current.emit('codeChange', { projectId, fileName, content: newCode });
+        console.log('Emitting code change for project:', projectId, 'file:', fileName, 'content:', newCode, 'userId:', userId);
+        socket.current.emit('codeChange', { projectId, fileName, content: newCode, senderId: userId });
         lastCodeRef.current = newCode;
-        saveToDatabase(newCode);
       }
     }, 300),
-    [projectId, fileName]
+    [projectId, fileName, userId]
   );
 
-  const saveToDatabase = useCallback(
-    debounce(async (newCode) => {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.post(
-          `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
-          { content: newCode },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        setSaveStatus('Saved successfully!');
-        setTimeout(() => setSaveStatus(''), 2000);
-        console.log('Code saved to database:', { projectId, fileName });
-      } catch (err) {
-        setSaveStatus('Save failed!');
-        console.error('Save to database error:', err.response?.data || err.message);
-        setTimeout(() => setSaveStatus(''), 2000);
-      }
-    }, 1000),
-    [projectId, fileName]
-  );
+  const handleCursorChange = useCallback((selection) => {
+    const cursor = selection.getCursor();
+    cursorPositionRef.current = cursor; // Update local cursor position
+    const lastPosition = cursors[userId] || { row: -1, column: -1 };
+    if (cursor.row !== lastPosition.row || cursor.column !== lastPosition.column) {
+      console.log('Emitting cursor move for user:', userId, 'position:', cursor);
+      socket.current.emit('cursorMove', { projectId, userId, position: cursor });
+    }
+  }, [projectId, userId, cursors]);
 
-  const handleCursorChange = useCallback(
-    debounce((selection) => {
-      if (!isFocusedRef.current) return; // Ignore if not focused
-      const cursor = selection.getCursor();
-      const lastPosition = cursors[userId] || { row: -1, column: -1 };
-      if (!isUpdatingRef.current && (cursor.row !== lastPosition.row || cursor.column !== lastPosition.column)) {
-        console.log('Emitting cursor move for user:', userId, 'position:', cursor);
-        socket.current.emit('cursorMove', { projectId, userId, position: cursor });
-      }
-    }, 100), // Increased debounce to 100ms to reduce frequency
-    [projectId, userId, cursors]
-  );
+  const handleSave = async () => {
+    try {
+      setSaveStatus('Saving...');
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
+        { content: code },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setLastSavedCode(code);
+      setSaveStatus('Saved!');
+      console.log('Code saved:', { projectId, fileName, lastModified: response.data.lastModified });
+
+      // Sync saved state to all clients
+      socket.current.emit('codeChange', { projectId, fileName, content: code, senderId: userId, isSaved: true });
+
+      setTimeout(() => setSaveStatus(''), 2000);
+    } catch (error) {
+      console.error('Save error:', error);
+      setSaveStatus('Save failed!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    }
+  };
 
   useEffect(() => {
     socket.current = io('http://localhost:5000', {
@@ -77,26 +76,27 @@ const CodeEditor = ({ projectId, fileName }) => {
     console.log('Attempting to join room:', projectId);
     socket.current.emit('joinRoom', projectId);
 
-    socket.current.on('codeChange', ({ fileName: receivedFileName, content, senderId }) => {
+    socket.current.on('codeChange', ({ fileName: receivedFileName, content, senderId, isSaved }) => {
       if (receivedFileName === fileName && senderId !== userId) {
-        console.log('Received code update for file:', receivedFileName, 'content:', content, 'from:', senderId);
-        isUpdatingRef.current = true;
-        setCode(content);
-        if (editorRef.current) {
-          const editor = editorRef.current.editor;
-          const cursor = editor.getCursorPosition();
-          editor.setValue(content, -1);
-          editor.moveCursorToPosition(cursor);
+        console.log('Received code update for file:', receivedFileName, 'content:', content, 'from:', senderId, 'isSaved:', isSaved, 'localUserId:', userId);
+        const currentCursor = { ...cursorPositionRef.current }; // Capture current cursor
+        if (content !== code) { // Only update if content differs
+          setCode(content);
+          if (editorRef.current) {
+            const session = editorRef.current.editor.getSession();
+            session.setValue(content); // Update session directly
+            editorRef.current.editor.moveCursorToPosition(currentCursor); // Restore cursor
+          }
         }
-        isUpdatingRef.current = false;
+        if (isSaved) {
+          setLastSavedCode(content);
+        }
       }
     });
 
     socket.current.on('userJoined', (joinedUserId) => {
       console.log('User joined:', joinedUserId);
       setUsers((prev) => [...new Set([...prev, joinedUserId])]);
-      setSaveStatus(`${joinedUserId.slice(-4)} joined the collaboration!`);
-      setTimeout(() => setSaveStatus(''), 2000);
     });
 
     socket.current.on('userDisconnected', (disconnectedUserId) => {
@@ -107,12 +107,10 @@ const CodeEditor = ({ projectId, fileName }) => {
         delete newCursors[disconnectedUserId];
         return newCursors;
       });
-      setSaveStatus(`${disconnectedUserId.slice(-4)} left the collaboration!`);
-      setTimeout(() => setSaveStatus(''), 2000);
     });
 
     socket.current.on('cursorMove', ({ userId: movedUserId, position }) => {
-      if (movedUserId !== userId) { // Only update for other users
+      if (movedUserId !== userId) {
         console.log(`Received cursor move from user ${movedUserId}:`, position);
         setCursors((prev) => ({
           ...prev,
@@ -130,12 +128,14 @@ const CodeEditor = ({ projectId, fileName }) => {
         );
         const initialCode = data.content || '// Start coding here';
         setCode(initialCode);
+        setLastSavedCode(initialCode);
         if (editorRef.current) {
-          editorRef.current.editor.setValue(initialCode, -1);
+          editorRef.current.editor.getSession().setValue(initialCode); // Use session for initial load
+          editorRef.current.editor.moveCursorToPosition({ row: 0, column: 0 }); // Start at beginning
         }
         lastCodeRef.current = initialCode;
       } catch (err) {
-        console.error('Fetch initial code error:', err.response?.data || err.message);
+        console.error('Fetch initial code error:', err);
       }
     };
     fetchInitialCode();
@@ -145,7 +145,7 @@ const CodeEditor = ({ projectId, fileName }) => {
       socket.current.emit('leaveRoom', projectId);
       socket.current.disconnect();
     };
-  }, [projectId, fileName]);
+  }, [projectId, fileName, userId]);
 
   const cursorMarkers = Object.entries(cursors).map(([userId, position]) => ({
     startRow: position.row,
@@ -184,32 +184,27 @@ const CodeEditor = ({ projectId, fileName }) => {
     )
     .join('');
 
-  const handleFocus = () => {
-    isFocusedRef.current = true;
-  };
-
-  const handleBlur = () => {
-    isFocusedRef.current = false;
-  };
-
   return (
     <div className="p-4 bg-gray-800 text-white rounded-md">
       <style>{cursorStyles}</style>
-      <h3 className="text-lg font-semibold mb-2">{fileName}</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-lg font-semibold">{fileName}</h3>
+        <button
+          onClick={handleSave}
+          className="p-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300"
+          disabled={code === lastSavedCode}
+        >
+          Save
+        </button>
+      </div>
       <p className="mb-2">Connected Users: {users.length || 0}</p>
-      {saveStatus && (
-        <div className="p-2 mb-2 bg-green-600 text-white rounded-md text-sm">
-          {saveStatus}
-        </div>
-      )}
+      {saveStatus && <p className="text-yellow-400 mb-2">{saveStatus}</p>}
       <AceEditor
         mode="javascript"
         theme="monokai"
         value={code}
         onChange={handleCodeChange}
         onCursorChange={handleCursorChange}
-        onFocus={handleFocus} // Track focus
-        onBlur={handleBlur}   // Track blur
         name="code-editor"
         width="100%"
         height="400px"
