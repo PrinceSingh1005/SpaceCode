@@ -132,7 +132,7 @@ router.post('/:projectId/invite', authMiddleware(), async (req, res) => {
       return res.status(403).json({ error: 'Only the project owner can generate invites' });
     }
 
-    const meetingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/meeting/${project._id}`;
+    const meetingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/projects/${project._id}`;
 
     if (project.sessionActive && project.inviteCode) {
       return res.json({ inviteCode: project.inviteCode, meetingLink });

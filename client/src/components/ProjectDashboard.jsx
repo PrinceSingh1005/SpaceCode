@@ -4,6 +4,7 @@ import CodeEditor from './CodeEditor';
 import io from 'socket.io-client';
 import CollaborationPanel from './CollaborationPanel';
 import { useAuth } from '../Context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 function decodeJwt(token) {
   if (!token) return {};
@@ -26,8 +27,76 @@ const ProjectDashboard = () => {
   const [notification, setNotification] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const socketRef = useRef(null);
+  const colabPanelRef = useRef(null);
   const [userId, setUserId] = useState('');
   const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (colabPanelRef.current && !colabPanelRef.current.contains(event.target)) {
+        setIsColabOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isColabOpen]);
+
+  useEffect(() => {
+    // This function will run when the component mounts to check the URL
+    const attemptJoinFromLink = async () => {
+      const queryParams = new URLSearchParams(window.location.search);
+      const meetingId = queryParams.get('meetingId');
+
+      if (meetingId) {
+        setLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            // Or handle login redirection
+            throw new Error('You must be logged in to join a meeting.');
+          }
+
+          // Your existing backend GET route for validating a meeting
+          const { data: meetingData } = await axios.get(
+            `http://localhost:5000/api/meetings/${meetingId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          // The backend returns the project details on success
+          const projectToJoin = projects.find(p => p._id === meetingData.projectId._id);
+          
+          if (projectToJoin) {
+            setSelectedProject(projectToJoin);
+            setNotification('Successfully joined scheduled session!');
+            setTimeout(() => setNotification(''), 3000);
+          } else {
+            // This case might happen if the project list hasn't loaded yet
+            // Or if the user isn't a member of that project.
+            setError('Project not found in your list.');
+          }
+
+          // Clean the URL to remove the meetingId query parameter
+          navigate('/projects', { replace: true });
+
+        } catch (err) {
+          setError(err.response?.data?.error || 'Failed to join via link. The session may not be active.');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    // We only run this if projects are loaded, to ensure we can select the project
+    if (projects.length > 0) {
+      attemptJoinFromLink();
+    }
+  }, [projects, navigate]);
+
+
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -318,7 +387,7 @@ const ProjectDashboard = () => {
         </button>
       )}
       {isColabOpen && (
-        <div className="absolute top-20 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all duration-300">
+        <div className="absolute top-5 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all duration-300">
           <CollaborationPanel projects={projects} onUpdate={onUpdate} />
         </div>
       )}
@@ -380,7 +449,7 @@ const ProjectDashboard = () => {
       <aside className="hidden lg:block lg:w-1/4 p-6 bg-white shadow-lg border-r border-gray-200 overflow-y-auto relative" style={{ paddingBottom: '72px' }}>
         <h2 className="text-2xl font-bold mb-6 text-blue-700">Your Projects</h2>
         {loading && <p className="text-gray-500">Loading...</p>}
-        {error && <p className="text-red-500 mb-4">{error}</p>}
+        {/* {error && <p className="text-red-500 mb-4">{error}</p>} */}
         {renderSidebarContent()}
         <button
           onClick={logout}
@@ -428,7 +497,7 @@ const ProjectDashboard = () => {
             No project selected. Choose or create a project to get started.
           </div>
         )}
-        {error && <p className="text-red-500 mt-4">{error}</p>}
+        {/* {error && <p className="text-red-500 mt-4">{error}</p>} */}
         {notification && (
           <div className="fixed top-4 left-4 p-2 bg-green-600 text-white rounded-md text-sm shadow-lg opacity-0 animate-fadeInOut z-50">
             {notification}

@@ -23,7 +23,8 @@ router.post('/:projectId', authMiddleware, async (req, res) => {
     });
     await meeting.save();
 
-    const meetingLink = `http://localhost:5173/meeting/${meeting.meetingId}?time=${meeting.startTime.getTime()}`;
+    const meetingLink = `http://localhost:5173/projects/?meetingId=${meeting.meetingId}`;
+
     res.status(201).json({ meeting, meetingLink });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
