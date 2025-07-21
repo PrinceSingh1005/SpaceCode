@@ -387,7 +387,7 @@ const ProjectDashboard = () => {
         </button>
       )}
       {isColabOpen && (
-        <div className="absolute top-5 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all duration-300">
+        <div ref={colabPanelRef} className="absolute top-5 right-4 z-40 w-11/12 sm:w-96 bg-white rounded-lg shadow-xl p-5 transition-all duration-300">
           <CollaborationPanel projects={projects} onUpdate={onUpdate} />
         </div>
       )}
