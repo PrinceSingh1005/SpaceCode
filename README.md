@@ -8,15 +8,15 @@
 
 | Login Page            | Register Page               |
 | --------------------- | --------------------------- |
-| ![Login](./Login.png) | ![Register](./Register.png) |
+| ![Login](./client/public/assets/Login.png) | ![Register](./client/public/assets/Register.png) |
 
 | Home Page           | Project Dashboard                           |
 | ------------------- | ------------------------------------------- |
-| ![Home](./Home.png) | ![ProjectDashboard](./ProjectDashboard.png) |
+| ![Home](./client/public/assets/Home.png) | ![ProjectDashboard](./client/public/assets/ProjectDashboard.png) |
 
 | Real-Time Code Editor                    | Invite Collaborators                  |
 | ---------------------------------------- | ------------------------------------- |
-| ![Code Editor](./RealTimeCodeEditor.png) | ![Invite](./Invite%20for%20colab.png) |
+| ![Code Editor](./client/public/assets/RealTimeCodeEditor.png) | ![Invite](./client/public/assets/Invite%20for%20colab.png) |
 
 ---
 
