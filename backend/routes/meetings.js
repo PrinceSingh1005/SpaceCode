@@ -4,7 +4,7 @@ const Meeting = require('../models/Meeting');
 const Project = require('../models/Project');
 const authMiddleware = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
-
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 router.post('/:projectId', authMiddleware, async (req, res) => {
   try {
     const { startTime, endTime } = req.body;
@@ -23,7 +23,7 @@ router.post('/:projectId', authMiddleware, async (req, res) => {
     });
     await meeting.save();
 
-    const meetingLink = `http://localhost:5173/projects/?meetingId=${meeting.meetingId}`;
+    const meetingLink = `${FRONTEND_URL}/projects/?meetingId=${meeting.meetingId}`;
 
     res.status(201).json({ meeting, meetingLink });
   } catch (error) {

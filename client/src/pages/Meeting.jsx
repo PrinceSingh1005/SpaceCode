@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import CodeEditor from '../components/CodeEditor';
 
+const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const Meeting = () => {
   const { meetingId } = useParams();
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ const Meeting = () => {
         console.log('Fetching meeting with ID:', meetingId);
         console.log('User ID:', userId);
         console.log('Token:', token);
-        const { data } = await axios.get(`http://localhost:5000/api/meetings/${meetingId}`, {
+        const { data } = await axios.get(`${VITE_BACKEND_URL}/api/meetings/${meetingId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         console.log('Meeting data:', data);

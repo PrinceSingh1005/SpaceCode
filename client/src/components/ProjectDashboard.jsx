@@ -3,7 +3,7 @@ import axios from 'axios';
 import CodeEditor from './CodeEditor';
 import io from 'socket.io-client';
 import CollaborationPanel from './CollaborationPanel';
-import { useAuth } from '../Context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 function decodeJwt(token) {
@@ -15,6 +15,8 @@ function decodeJwt(token) {
     return {};
   }
 }
+
+const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '${VITE_BACKEND_URL}';
 
 const ProjectDashboard = () => {
   const [projects, setProjects] = useState([]);
@@ -62,7 +64,7 @@ const ProjectDashboard = () => {
 
           // Your existing backend GET route for validating a meeting
           const { data: meetingData } = await axios.get(
-            `http://localhost:5000/api/meetings/${meetingId}`,
+            `${VITE_BACKEND_URL}/api/meetings/${meetingId}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
 
@@ -110,7 +112,7 @@ const ProjectDashboard = () => {
       }
     }
 
-    socketRef.current = io('http://localhost:5000', {
+    socketRef.current = io('${VITE_BACKEND_URL}', {
       auth: { token: localStorage.getItem('token') },
     });
 
@@ -120,7 +122,7 @@ const ProjectDashboard = () => {
           setLoading(true);
           const token = localStorage.getItem('token');
           const { data } = await axios.get(
-            `http://localhost:5000/api/projects/${updatedProject._id}`,
+            `${VITE_BACKEND_URL}/api/projects/${updatedProject._id}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           setProjects((prev) => {
@@ -183,7 +185,7 @@ const ProjectDashboard = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
-        const { data } = await axios.get('http://localhost:5000/api/projects', {
+        const { data } = await axios.get('${VITE_BACKEND_URL}/api/projects', {
           headers: { Authorization: `Bearer ${token}` },
         });
         setProjects(data);
@@ -201,7 +203,7 @@ const ProjectDashboard = () => {
           setLoading(true);
           const token = localStorage.getItem('token');
           const { data } = await axios.get(
-            `http://localhost:5000/api/meetings/project/${selectedProject._id}`,
+            `${VITE_BACKEND_URL}/api/meetings/project/${selectedProject._id}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           setMeetings(data);
@@ -228,7 +230,7 @@ const ProjectDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.post(
-        'http://localhost:5000/api/projects',
+        '${VITE_BACKEND_URL}/api/projects',
         { name: newProjectName.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -251,7 +253,7 @@ const ProjectDashboard = () => {
         setLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('http://localhost:5000/api/projects', {
+          const { data } = await axios.get('${VITE_BACKEND_URL}/api/projects', {
             headers: { Authorization: `Bearer ${token}` },
           });
           setProjects(data);
@@ -274,7 +276,7 @@ const ProjectDashboard = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       await axios.delete(
-        `http://localhost:5000/api/projects/${selectedProject._id}/collaborators/${userId}`,
+        `${VITE_BACKEND_URL}/api/projects/${selectedProject._id}/collaborators/${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setNotification('Left collaboration successfully!');
@@ -302,7 +304,7 @@ const ProjectDashboard = () => {
         setLoading(true);
         const token = localStorage.getItem('token');
         const { data } = await axios.get(
-          `http://localhost:5000/api/meetings/project/${project._id}`,
+          `${VITE_BACKEND_URL}/api/meetings/project/${project._id}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setMeetings(data);

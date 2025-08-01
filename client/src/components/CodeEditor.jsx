@@ -17,6 +17,8 @@ function decodeJwt(token) {
   }
 }
 
+const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 const CodeEditor = ({ projectId, fileName }) => {
   const [code, setCode] = useState('// Your code starts here...');
   const [collaborators, setCollaborators] = useState({});
@@ -68,7 +70,7 @@ const CodeEditor = ({ projectId, fileName }) => {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
+        `${VITE_BACKEND_URL}/api/projects/${projectId}/files/${fileName}`,
         { content: codeRef.current },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -83,7 +85,7 @@ const CodeEditor = ({ projectId, fileName }) => {
   useEffect(() => {
     if (!userId) return;
 
-    socket.current = io('http://localhost:5000', {
+    socket.current = io(VITE_BACKEND_URL, {
       auth: { token: localStorage.getItem('token') },
     });
 
@@ -133,7 +135,7 @@ const CodeEditor = ({ projectId, fileName }) => {
       try {
         const token = localStorage.getItem('token');
         const { data } = await axios.get(
-          `http://localhost:5000/api/projects/${projectId}/files/${fileName}`,
+          `${VITE_BACKEND_URL}/api/projects/${projectId}/files/${fileName}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const initialCode = data.content || '// Your code starts here...';
