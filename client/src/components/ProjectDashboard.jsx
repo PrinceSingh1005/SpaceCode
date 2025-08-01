@@ -16,7 +16,7 @@ function decodeJwt(token) {
   }
 }
 
-const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '${VITE_BACKEND_URL}';
+const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const ProjectDashboard = () => {
   const [projects, setProjects] = useState([]);
@@ -34,7 +34,7 @@ const ProjectDashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (colabPanelRef.current && !colabPanelRef.current.contains(event.target)) {
@@ -70,7 +70,7 @@ const ProjectDashboard = () => {
 
           // The backend returns the project details on success
           const projectToJoin = projects.find(p => p._id === meetingData.projectId._id);
-          
+
           if (projectToJoin) {
             setSelectedProject(projectToJoin);
             setNotification('Successfully joined scheduled session!');
@@ -112,7 +112,7 @@ const ProjectDashboard = () => {
       }
     }
 
-    socketRef.current = io('${VITE_BACKEND_URL}', {
+    socketRef.current = io(`${VITE_BACKEND_URL}`, {
       auth: { token: localStorage.getItem('token') },
     });
 
@@ -185,7 +185,7 @@ const ProjectDashboard = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
-        const { data } = await axios.get('${VITE_BACKEND_URL}/api/projects', {
+        const { data } = await axios.get(`${VITE_BACKEND_URL}/api/projects`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setProjects(data);
@@ -230,7 +230,7 @@ const ProjectDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.post(
-        '${VITE_BACKEND_URL}/api/projects',
+        `${VITE_BACKEND_URL}/api/projects`,
         { name: newProjectName.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -253,7 +253,7 @@ const ProjectDashboard = () => {
         setLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('${VITE_BACKEND_URL}/api/projects', {
+          const { data } = await axios.get(`${VITE_BACKEND_URL}/api/projects`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setProjects(data);
